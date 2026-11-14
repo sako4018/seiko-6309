@@ -1,7 +1,7 @@
 import * as THREE from 'three';
 import { RoundedBoxGeometry } from 'three/addons/geometries/RoundedBoxGeometry.js';
 import type { Materials } from '../core/materials';
-import { addCircleHole, cylZ, extrude, gearShape } from '../core/geometry';
+import { addCircleHole, cylZ, extrude, gearShape, roundedHull } from '../core/geometry';
 import { DIAL, casebackTexture, dialTexture } from '../core/textures';
 import { PartRegistry, mesh } from './parts';
 
@@ -24,21 +24,17 @@ export const Z_EXT = {
   crownZ: 0.5,
 };
 
+/**
+ * Case outline from the photos: round around the dial, with the flanks running
+ * straight (tangent) from the case circle to the flat, wide lug ends. This is the
+ * convex hull of the case circle and the four lug corners. (+0.8 mm bevel all round.)
+ */
 function caseOutline(): THREE.Shape {
-  const R = 17.6; // + 0.8 bevel → ~18.4 mm radius
-  const lugX = 9.9;
-  const lugY = 20.6;
-  const a = 58 * D2R;
-  const s = new THREE.Shape();
-  s.moveTo(R * Math.cos(-a), R * Math.sin(-a));
-  s.absarc(0, 0, R, -a, a, false);
-  s.quadraticCurveTo(10.6, 17.6, lugX, lugY);
-  s.quadraticCurveTo(0, lugY + 0.6, -lugX, lugY);
-  s.quadraticCurveTo(-10.6, 17.6, -R * Math.cos(a), R * Math.sin(a));
-  s.absarc(0, 0, R, Math.PI - a, Math.PI + a, false);
-  s.quadraticCurveTo(-10.6, -17.6, -lugX, -lugY);
-  s.quadraticCurveTo(0, -lugY - 0.6, lugX, -lugY);
-  s.quadraticCurveTo(10.6, -17.6, R * Math.cos(-a), R * Math.sin(-a));
+  const s = roundedHull([
+    { x: 0, y: 0, r: 17.3 },
+    { x: 9.1, y: 19.4, r: 0.7 }, { x: -9.1, y: 19.4, r: 0.7 },
+    { x: 9.1, y: -19.4, r: 0.7 }, { x: -9.1, y: -19.4, r: 0.7 },
+  ], 96);
   addCircleHole(s, 0, 0, 16.2);
   return s;
 }
@@ -73,7 +69,7 @@ export function buildExterior(reg: PartRegistry, m: Materials, parent: THREE.Obj
   // ---- Bezel (polished, rounded) ----
   const bezel = reg.add('bezel', { category: 'case', explode: [0, 0, 26] }, parent);
   bezel.spin.add(mesh(lathe([
-    [15.0, 3.7], [15.0, 4.5], [15.35, 4.85], [16.4, 4.95], [17.4, 4.7], [18.1, 4.25], [18.3, 3.8], [18.2, 3.7],
+    [15.0, 3.7], [15.0, 4.45], [15.3, 4.78], [16.0, 4.86], [16.7, 4.62], [17.1, 4.2], [17.15, 3.7],
   ]), m.steelPolished));
 
   // ---- Crystal (domed) ----
@@ -100,34 +96,34 @@ export function buildExterior(reg: PartRegistry, m: Materials, parent: THREE.Obj
   edge.translate(0, 0, (Z_EXT.dialFront + Z_EXT.dialBack) / 2);
   dial.spin.add(mesh(edge, m.gilt));
 
-  // Applied hour markers: polished blocks with dark inlay; doubled at 12, omitted at 3 (window).
-  const markerGeo = new THREE.BoxGeometry(1.05, 2.5, 0.42);
-  const inlayGeo = new THREE.BoxGeometry(0.42, 1.9, 0.04);
-  const addMarker = (angle: number, tangential: number) => {
+  // Applied hour markers: polished frame with black centre and a small pip outboard;
+  // a single wide block at 12; omitted at 3 (day-date window).
+  const addMarker = (angle: number, wide: boolean) => {
     const g = new THREE.Group();
     g.rotation.z = angle - Math.PI / 2;
-    const block = mesh(markerGeo, m.steelPolished, Z_EXT.dialFront + 0.21, 'markers');
-    block.position.set(tangential, 13.0, Z_EXT.dialFront + 0.21);
-    const inl = mesh(inlayGeo, m.inlay, Z_EXT.dialFront + 0.44, 'markers');
-    inl.position.set(tangential, 13.0, Z_EXT.dialFront + 0.44);
-    g.add(block, inl);
+    const w = wide ? 2.9 : 1.55;
+    const block = mesh(new THREE.BoxGeometry(w, 2.3, 0.45), m.steelPolished, 0, 'markers');
+    block.position.set(0, 12.75, Z_EXT.dialFront + 0.22);
+    const inl = mesh(new THREE.BoxGeometry(w - 0.75, 1.55, 0.04), m.inlay, 0, 'markers');
+    inl.position.set(0, 12.75, Z_EXT.dialFront + 0.46);
+    const pip = mesh(new THREE.BoxGeometry(0.55, 0.55, 0.2), m.steelPolished, 0, 'markers');
+    pip.position.set(0, 14.45, Z_EXT.dialFront + 0.1);
+    g.add(block, inl, pip);
     dial.spin.add(g);
   };
   for (let h = 0; h < 12; h++) {
     if (h === 3) continue;
-    const angle = Math.PI / 2 - h * 30 * D2R;
-    if (h === 0) {
-      addMarker(angle, -0.75);
-      addMarker(angle, 0.75);
-    } else addMarker(angle, 0);
+    addMarker(Math.PI / 2 - h * 30 * D2R, h === 0);
   }
 
   // Day-date window frame (polished).
   const frame = new THREE.Shape();
-  frame.moveTo(DIAL.dayWin[0] - 0.25, -1.25);
-  frame.lineTo(DIAL.dateWin[1] + 0.25, -1.25);
-  frame.lineTo(DIAL.dateWin[1] + 0.25, 1.25);
-  frame.lineTo(DIAL.dayWin[0] - 0.25, 1.25);
+  const fb = 0.45;
+  const fy = DIAL.winHalfH + fb;
+  frame.moveTo(DIAL.dayWin[0] - fb, -fy);
+  frame.lineTo(DIAL.dateWin[1] + fb, -fy);
+  frame.lineTo(DIAL.dateWin[1] + fb, fy);
+  frame.lineTo(DIAL.dayWin[0] - fb, fy);
   frame.closePath();
   for (const [x0, x1] of [DIAL.dayWin, DIAL.dateWin]) {
     const h = new THREE.Path();
@@ -138,7 +134,7 @@ export function buildExterior(reg: PartRegistry, m: Materials, parent: THREE.Obj
     h.closePath();
     frame.holes.push(h);
   }
-  dial.spin.add(mesh(extrude(frame, 0.22), m.steelPolished, Z_EXT.dialFront + 0.11, 'dayDateWindow'));
+  dial.spin.add(mesh(extrude(frame, 0.3), m.steelPolished, Z_EXT.dialFront + 0.15, 'dayDateWindow'));
 
   // ---- Hands ----
   const hand = (id: string, z: number, explodeZ: number, shape: THREE.Shape, inlay: [number, number, number] | null, hubR: number) => {
@@ -154,8 +150,8 @@ export function buildExterior(reg: PartRegistry, m: Materials, parent: THREE.Obj
     p.spin.add(mesh(cylZ(hubR, Z_EXT.dialFront + 0.3, z + 0.08, 24), m.steelPolished));
     return p;
   };
-  hand('hourHand', Z_EXT.hour, 21, batonHand(8.6, 1.6, 1.35, 1.05), [1.6, 7.6, 0.42], 1.05);
-  hand('minuteHand', Z_EXT.minute, 23, batonHand(12.7, 2.0, 1.15, 0.85), [2.2, 11.8, 0.36], 0.8);
+  hand('hourHand', Z_EXT.hour, 21, batonHand(8.8, 1.0, 1.7, 1.4), [1.6, 7.8, 0.6], 1.05);
+  hand('minuteHand', Z_EXT.minute, 23, batonHand(12.9, 1.4, 1.35, 1.05), [2.2, 12.0, 0.46], 0.8);
   hand('secondHand', Z_EXT.second, 25, batonHand(13.7, 3.4, 0.26, 0.2), null, 0.5);
 
   // ---- Crown at 3 o'clock ----
@@ -188,17 +184,17 @@ export function buildExterior(reg: PartRegistry, m: Materials, parent: THREE.Obj
 
 function buildBracelet(reg: PartRegistry, m: Materials, parent: THREE.Object3D): void {
   const part = reg.add('bracelet', { category: 'bracelet' }, parent);
-  const R = 25.4;
-  const zc = -14.0;
-  const lugY = 21.4;
-  const lugZ = -0.6;
+  const zc = -13.0;
+  const lugY = 21.1;
+  const lugZ = -0.9;
+  const R = Math.hypot(lugY, lugZ - zc);
   const beta0 = Math.atan2(lugZ - zc, lugY);
-  const linkLen = 4.3;
+  const linkLen = 3.5;
   const betaEnd = -72 * D2R;
   const n = Math.floor(((beta0 - betaEnd) * R) / linkLen);
 
-  const centre = new RoundedBoxGeometry(8.4, linkLen - 0.3, 2.5, 2, 0.45);
-  const side = new RoundedBoxGeometry(4.9, linkLen - 0.3, 2.3, 2, 0.45);
+  const centre = new RoundedBoxGeometry(8.2, linkLen - 0.35, 1.9, 2, 0.25);
+  const side = new RoundedBoxGeometry(4.75, linkLen - 0.35, 1.75, 2, 0.25);
   const cm = new THREE.InstancedMesh(centre, m.braceletSteel, n * 2);
   const sm = new THREE.InstancedMesh(side, m.braceletSteel, n * 4);
 
@@ -218,8 +214,8 @@ function buildBracelet(reg: PartRegistry, m: Materials, parent: THREE.Object3D):
       const b = beta0 - ((i + 0.5) * linkLen) / R;
       cm.setMatrixAt(ci++, place(b, sign, 0));
       const bs = b - (0.5 * linkLen) / R; // outer rows staggered by half a link
-      sm.setMatrixAt(si++, place(bs, sign, 6.75));
-      sm.setMatrixAt(si++, place(bs, sign, -6.75));
+      sm.setMatrixAt(si++, place(bs, sign, 6.6));
+      sm.setMatrixAt(si++, place(bs, sign, -6.6));
     }
   }
   cm.instanceMatrix.needsUpdate = true;
@@ -227,15 +223,15 @@ function buildBracelet(reg: PartRegistry, m: Materials, parent: THREE.Object3D):
   part.spin.add(cm, sm);
 
   // End pieces against the lugs.
-  const endGeo = new RoundedBoxGeometry(19.2, 2.2, 2.6, 2, 0.5);
+  const endGeo = new RoundedBoxGeometry(19.8, 2.4, 2.2, 2, 0.3);
   for (const sign of [1, -1]) {
     const e = new THREE.Mesh(endGeo, m.braceletSteel);
-    e.applyMatrix4(place(beta0 - 0.6 / R, sign, 0));
+    e.applyMatrix4(place(beta0 - 0.9 / R, sign, 0));
     part.spin.add(e);
   }
 
   // Fold-over clasp at the bottom of the loop.
-  const clasp = new RoundedBoxGeometry(18.6, 17, 1.6, 2, 0.6);
+  const clasp = new RoundedBoxGeometry(17.8, 17, 1.4, 2, 0.4);
   const c1 = new THREE.Mesh(clasp, m.braceletSteel);
   c1.position.set(0, 0, zc - R + 0.2);
   const c2 = new THREE.Mesh(new RoundedBoxGeometry(17.2, 15, 0.8, 2, 0.35), m.steelPolished);
