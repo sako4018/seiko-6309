@@ -4,9 +4,9 @@ import * as THREE from 'three';
 
 export const DIAL = {
   R: 15.2,
-  dayWin: [6.2, 9.6] as const,
-  dateWin: [10.05, 12.1] as const,
-  winHalfH: 1.0,
+  dayWin: [5.7, 9.75] as const,
+  dateWin: [10.05, 12.7] as const,
+  winHalfH: 1.3,
 };
 export const DAY_TEXT_R = (DIAL.dayWin[0] + DIAL.dayWin[1]) / 2;
 export const DATE_TEXT_R = (DIAL.dateWin[0] + DIAL.dateWin[1]) / 2;
@@ -132,9 +132,9 @@ export function dialTexture(): THREE.CanvasTexture {
   ctx.clip();
 
   const g = ctx.createRadialGradient(X(-3), Y(4), 0, X(0), Y(0), R * s);
-  g.addColorStop(0, '#ddd5c2');
-  g.addColorStop(0.6, '#d2c8b2');
-  g.addColorStop(1, '#bfb398');
+  g.addColorStop(0, '#dfdcd2');
+  g.addColorStop(0.6, '#d1cdc0');
+  g.addColorStop(1, '#b9b3a3');
   ctx.fillStyle = g;
   ctx.fillRect(0, 0, size, size);
 
@@ -152,6 +152,13 @@ export function dialTexture(): THREE.CanvasTexture {
     ctx.lineTo(size / 2 + Math.cos(a) * R * s, size / 2 + Math.sin(a) * R * s);
     ctx.stroke();
   }
+  // Fine linen weave (visible as faint vertical/horizontal lines in the photos).
+  for (let i = 0; i < size; i += 3) {
+    ctx.fillStyle = `rgba(${r() < 0.5 ? '255,255,250' : '90,85,70'},${0.025 + r() * 0.035})`;
+    ctx.fillRect(i, 0, 1, size);
+    ctx.fillStyle = `rgba(${r() < 0.5 ? '255,255,250' : '90,85,70'},${0.015 + r() * 0.02})`;
+    ctx.fillRect(0, i, size, 1);
+  }
   const e = ctx.createRadialGradient(size / 2, size / 2, R * s * 0.8, size / 2, size / 2, R * s);
   e.addColorStop(0, 'rgba(0,0,0,0)');
   e.addColorStop(1, 'rgba(70,52,22,0.2)');
@@ -162,10 +169,10 @@ export function dialTexture(): THREE.CanvasTexture {
   ctx.fillStyle = '#1e1e1e';
   ctx.textBaseline = 'middle';
   ctx.textAlign = 'center';
-  ctx.font = `700 ${2.0 * s}px ${SANS}`;
-  spaced(ctx, 'SEIKO', X(0), Y(7.5), 0.32 * s);
-  ctx.font = `500 ${0.92 * s}px ${SANS}`;
-  spaced(ctx, 'AUTOMATIC', X(0), Y(5.55), 0.26 * s);
+  ctx.font = `700 ${1.55 * s}px ${SANS}`;
+  spaced(ctx, 'SEIKO', X(0), Y(6.4), 0.26 * s);
+  ctx.font = `500 ${0.75 * s}px ${SANS}`;
+  spaced(ctx, 'AUTOMATIC', X(0), Y(4.85), 0.2 * s);
 
   // Seiko 5 emblem (simplified shield with "5").
   const sx = X(0);
@@ -223,12 +230,12 @@ function calendarDisc(outer: number, inner: number, textR: number, labels: strin
 
 export function dateRingTexture(outer: number, inner: number): THREE.CanvasTexture {
   const labels = Array.from({ length: DATE_SLOTS }, (_, i) => String(i + 1));
-  return calendarDisc(outer, inner, DATE_TEXT_R, labels, 1.45, 2048);
+  return calendarDisc(outer, inner, DATE_TEXT_R, labels, 1.85, 2048);
 }
 
 export function dayDiscTexture(outer: number): THREE.CanvasTexture {
   const labels = Array.from({ length: DAY_SLOTS }, (_, i) => DAYS[i % 7]);
-  return calendarDisc(outer, 0, DAY_TEXT_R, labels, 1.25, 1536);
+  return calendarDisc(outer, 0, DAY_TEXT_R, labels, 1.6, 1536);
 }
 
 /** Caseback face: circular graining + engraving (simplified: collage is too low-res to read). */
